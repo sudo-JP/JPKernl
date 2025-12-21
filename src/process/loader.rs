@@ -34,7 +34,8 @@ fn allocate_stack(size: usize) -> Result<*mut u8, ProcessError> {
     }
 }
 
-unsafe fn setup_initial_stack(stack_base: *mut u8, stack_size: usize, entry: fn() -> !) -> *mut u32 {
+unsafe fn setup_initial_stack(stack_base: *mut u8, 
+    stack_size: usize, entry: fn(*mut ()) -> !, arg: *mut()) -> *mut u32 {
     let mut sp = (stack_base as usize + stack_size) as *mut u32; 
 
     // Move down one and write some value
@@ -49,14 +50,18 @@ unsafe fn setup_initial_stack(stack_base: *mut u8, stack_size: usize, entry: fn(
         sp = sp.offset(-1);
         *sp = 0;            // LR
                             
-        // R12, R3, R2, R1, R0
-        for _ in 0..5 {
+        // R12, R3, R2, R1
+        for _ in 0..4 {
             sp = sp.offset(-1);
             *sp = 0;        
         }
+
+        // R0 
+        sp = sp.offset(-1); 
+        *sp = arg as u32;
         
-        // R11-R4 
-        for _ in 11..=4 {
+        // R4-R11
+        for _ in 4..=11 {
             sp = sp.offset(-1);
             *sp = 0;        
         }
@@ -65,12 +70,12 @@ unsafe fn setup_initial_stack(stack_base: *mut u8, stack_size: usize, entry: fn(
     sp
 }
 
-pub unsafe fn create_process(entry: fn() -> !, 
-    stack_size: usize) -> Result<PCB, ProcessError> {
+pub unsafe fn create_process(entry: fn(* mut()) -> !, 
+    stack_size: usize, arg: *mut ()) -> Result<PCB, ProcessError> {
     let stack_start = allocate_stack(stack_size)?;
 
     unsafe {
-        let sp = setup_initial_stack(stack_start, stack_size, entry);
+        let sp = setup_initial_stack(stack_start, stack_size, entry, arg);
         let id: u8 = ID; 
         ID += 1; 
         Ok(PCB {

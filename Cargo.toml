@@ -16,6 +16,11 @@ rp2040-boot2 = "0.3"
 # Allocator for dynamic memory
 embedded-alloc = "0.5"
 
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+embedded-io = "0.7.1"
+embedded_hal_0_2 = {package = "embedded-hal", version = "0.2.5", features = ["unproven"]}
+
 # Debugging
 defmt = "0.3"
 defmt-rtt = "0.4"

@@ -9,6 +9,6 @@ use crate::PCB;
 
 const MAX_PROCS: usize = 256;
 
-static mut SCHEDULER: RR = RR::new();
-static mut PROCS: [Option<PCB>; MAX_PROCS] = [None; MAX_PROCS];
-static mut CURRENT: Option<u8> = None; 
+pub static mut SCHEDULER: RR = RR::new();
+pub static mut PROCS: [Option<PCB>; MAX_PROCS] = [None; MAX_PROCS];
+pub static mut CURRENT: Option<u8> = None; 

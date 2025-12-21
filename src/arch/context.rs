@@ -26,10 +26,10 @@ pub unsafe extern "C" fn switch_context(old_pcb: *mut PCB, new_pcb: *const PCB) 
 
         // 2. 
         "mov r2, sp",           // Get stack pointer 
-        "str r2, [r0, #4]",     // Store the r2 (current sp) to old_pcb->sp
+        "str r2, [r0, #0]",     // Store the r2 (current sp) to old_pcb->sp
 
         // 3. 
-        "ldr r2, [r1, #4]",     // Load sp from new_pcb to r2 
+        "ldr r2, [r1, #0]",     // Load sp from new_pcb to r2 
         "mov sp, r2",           // Place new_pcb->sp to current sp 
                                     
         // 4. 
@@ -47,3 +47,13 @@ pub unsafe extern "C" fn switch_context(old_pcb: *mut PCB, new_pcb: *const PCB) 
     );
 }
 
+
+#[unsafe(naked)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn jump_to_process(sp: *const u32) {
+    core::arch::naked_asm!(
+        "msr msp, r0",          // set main stack ptr to sp
+        "ldr r0, =0xFFFFFFF9",  // EXC_RETURN for thread mode with MSP
+        "bx lr", 
+    );
+}
