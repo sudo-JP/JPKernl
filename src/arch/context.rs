@@ -1,5 +1,4 @@
 use crate::process::*;
-use core::ptr;
 
 /*
 Save old process context
@@ -12,18 +11,39 @@ Save old process context
 r0 correspond to old_pcb 
 r1 correspond to new_pcb
 */
-#[naked]
-#[no_mangle]
+#[unsafe(naked)]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn switch_context(old_pcb: *mut PCB, new_pcb: *const PCB) {
-    core::arch::asm!(
-        "push {{r4-r11}}",          // Save callee-saved registers
+    core::arch::naked_asm!(
+        // 1.
+        "push {{r4-r7}}",          // Save callee-saved registers
+        // ARM Cortex-M0+ only let push and pop on r0-r7
+        "mov r4, r8",
+        "mov r5, r9", 
+        "mov r6, r10", 
+        "mov r7, r11", 
+        "push {{r4-r7}}",
+
+        // 2. 
         "mov r2, sp",               // Get stack pointer 
         "str r2, [r0, #8]",         // Store the r2 (current sp) to old_pcb->sp
+
+        // 3. 
         "ldr r2, [r1, #8]",         // Load sp from new_pcb to r2 
         "mov sp, r2",               // Place new_pcb->sp to current sp 
-        "pop {{r4-r11}}",           // Pop from callee
+                                    
+        // 4. 
+        "pop {{r4-r7}}",           // Pop from callee
+
+        // Put R4 content, which is R8 old value back into R8 and pop it
+        "mov r8, r4", 
+        "mov r9, r5",
+        "mov r10, r6",
+        "mov r11, r7",
+        "pop {{r4-r7}}",
+
+        // 5. 
         "bx lr",                    // Return 
-        options(noreturn), 
     );
 }
 
