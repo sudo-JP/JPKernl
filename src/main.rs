@@ -2,7 +2,7 @@
 #![no_main]
 
 use panic_halt as _;
-use rp2040_hal as hal;
+use rp2040_hal::{self as hal, fugit::ExtU32, timer::Alarm};
 // Some traits we need
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
@@ -11,7 +11,7 @@ use rp2040_hal::gpio::{Pin, FunctionSioOutput, PullDown};
 use hal::gpio::bank0::{Gpio0, Gpio1};
 use core::ptr;
 
-use rp2040_scheduler::{create_process, start_first_process, yield_now, Scheduler, CURRENT, PROCS, SCHEDULER};
+use rp2040_scheduler::{create_process, set_alarm, start_first_process, yield_now, Scheduler, CURRENT, PROCS, SCHEDULER};
 
 #[unsafe(link_section = ".boot2")]
 #[used]
@@ -51,6 +51,11 @@ fn main() -> ! {
 
     let mut timer = rp2040_hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
+    // Alarm 
+    let mut alarm = timer.alarm_0().unwrap();
+    let _ = alarm.schedule(100_000u32.micros());
+    alarm.enable_interrupt();
+
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::Sio::new(pac.SIO);
 
@@ -68,7 +73,10 @@ fn main() -> ! {
     let led_pin0 = pins.gpio0.into_push_pull_output(); 
     let led_pin1 = pins.gpio1.into_push_pull_output(); 
     let stack_size = 1024; 
+
+    set_alarm(alarm); 
     unsafe {
+        pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
         LED0 = Some(led_pin0);
         LED1 = Some(led_pin1);
         TIMER = Some(timer);
@@ -78,16 +86,9 @@ fn main() -> ! {
         create_process(stack_size, blink_slow, core::ptr::null_mut())
             .unwrap();
 
-        if PROCS[0].is_none() || PROCS[1].is_none() {
-        // Process creation failed - blink SOS
-            loop {
-                (*ptr::addr_of_mut!(LED0)).as_mut().unwrap().set_high().unwrap();
-                (*ptr::addr_of_mut!(TIMER)).as_mut().unwrap().delay_ms(20);
-                (*ptr::addr_of_mut!(LED0)).as_mut().unwrap().set_low().unwrap();
-                (*ptr::addr_of_mut!(TIMER)).as_mut().unwrap().delay_ms(20);
-            }
-        }
         CURRENT = Some(0);
+        let sched = ptr::addr_of_mut!(SCHEDULER); 
+        (*sched).dequeue().unwrap();
         start_first_process(PROCS[0].unwrap().sp);
     }
     
@@ -117,10 +118,9 @@ fn blink_fast(_arg: *mut ()) -> ! {
                 .unwrap();
             
             led.set_high().unwrap();
-            timer.delay_ms(500);
+            //timer.delay_ms(20);
             led.set_low().unwrap();
-            timer.delay_ms(500);
-            yield_now().unwrap();
+            //timer.delay_ms(20);
         }
     }
 }
@@ -128,7 +128,7 @@ fn blink_fast(_arg: *mut ()) -> ! {
 fn blink_slow(_arg: *mut ()) -> ! {
     loop {
         unsafe {
-            let led = ptr::addr_of_mut!(LED0)
+            let led = ptr::addr_of_mut!(LED1)
                 .cast::<Option<Led1>>()
                 .as_mut()
                 .unwrap()
@@ -143,10 +143,9 @@ fn blink_slow(_arg: *mut ()) -> ! {
                 .unwrap();
             
             led.set_high().unwrap();
-            timer.delay_ms(1000);
+            //timer.delay_ms(20);
             led.set_low().unwrap();
-            timer.delay_ms(1000);
-            yield_now().unwrap();
+            //timer.delay_ms(20);
         }
     }
 }

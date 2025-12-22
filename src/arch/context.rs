@@ -17,8 +17,25 @@ pub unsafe extern "C" fn process_trampoline() -> ! {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn switch_context(old_sp_ptr: *mut *mut u32, new_sp: *const u32) {
     core::arch::naked_asm!(
+        // Check if in interrupt state
+        "mov r2, lr",
+
+        // Shift r2 24 bits to get to top 
+        "lsrs r2, r2, #24",
+        // r3 0 means no interrupt, 1 means interrupted
+        "movs r3, #1",
+        "cmp r2, #0xFF",
+        "beq interrupt_sp",
+
+        // If not interrupt 
+        // set r3 to be 0
+        "movs r3, #0",
+
         // Save callee-saved registers and LR
         "push {{lr}}",
+
+        // Interrupt lable, skipping lr 
+        "interrupt_sp:",
         "push {{r4-r7}}",
         "mov r4, r8",
         "mov r5, r9",
@@ -43,8 +60,16 @@ pub unsafe extern "C" fn switch_context(old_sp_ptr: *mut *mut u32, new_sp: *cons
         // Restore R4-R7
         "pop {{r4-r7}}",
 
+        // Exit via interrupt 
+        "cmp r3, #1",
+        "beq interrupt_exit",
+
         // Restore LR and return
         "pop {{pc}}",
+
+        // Exit interrupt 
+        "interrupt_exit:",
+        "bx lr",
     );
 }
 
