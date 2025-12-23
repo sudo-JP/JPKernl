@@ -15,7 +15,7 @@ pub unsafe fn register_timer(timer: &rp2040_hal::Timer) {
     }
 }
 
-fn get_time_us() -> u64 {
+pub fn get_time_us() -> u64 {
     unsafe {
         if TIMER.is_null() {
             panic!("Timer not registered");
@@ -30,8 +30,8 @@ fn get_time_us() -> u64 {
  * */
 #[derive(Clone, Copy)]
 pub struct SleepEntry {
-    pid: u8, 
-    wake_time: u64,
+    pub pid: u8, 
+    pub wake_time: u64,
 }
 
 const DUMMY: SleepEntry = SleepEntry { pid: 0, wake_time: core::u64::MAX, };

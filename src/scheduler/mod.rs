@@ -14,3 +14,4 @@ const MAX_PROCS: usize = 256;
 pub static mut SCHEDULER: RR = RR::new();
 pub static mut PROCS: [Option<PCB>; MAX_PROCS] = [None; MAX_PROCS];
 pub static mut CURRENT: Option<u8> = None; 
+pub static mut SLEEP_QUEUE: SleepQueue = SleepQueue::new();
