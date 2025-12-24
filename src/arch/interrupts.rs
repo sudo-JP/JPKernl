@@ -1,10 +1,11 @@
 use cortex_m::interrupt::Mutex;
-use rp2040_hal::{fugit::ExtU32, timer::{Alarm, Alarm0}};
+use cortex_m_rt::exception;
+use rp2040_hal::{timer::{Alarm, Alarm0}};
 use core::cell::RefCell;
 use rp2040_hal::pac::interrupt;
 use core::ptr;
 
-use crate::{scheduler::{CURRENT, PROCS, SCHEDULER}, switch_context_isr, Scheduler, PCB, QUANTUM};
+use crate::{check_sleep_and_wake, scheduler::{CURRENT, PROCS, SCHEDULER}, switch_context_isr, Scheduler, PCB, QUANTUM, SLEEP_QUEUE};
 
 
 static ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
@@ -19,9 +20,18 @@ pub fn set_alarm(alarm: Alarm0) {
 /// Returns (old_sp_ptr, new_sp) or None if no switch needed
 unsafe fn schedule_next_isr() -> Option<(*mut *mut u32, *const u32)> {
     let sched = ptr::addr_of_mut!(SCHEDULER);
+    let sleep_q = ptr::addr_of_mut!(SLEEP_QUEUE);
     
     unsafe {
         let old_pid = CURRENT?;
+
+        // wake up all sleeping processes 
+        /*while (*sleep_q).get_size() > 0 {
+            if check_sleep_and_wake().is_err() {
+                break; 
+            }
+        }*/
+
         let next_pid = (*sched).dequeue().ok()?;
         
         // Re-enqueue current process
@@ -48,15 +58,26 @@ unsafe fn schedule_next_isr() -> Option<(*mut *mut u32, *const u32)> {
 
 #[interrupt]
 fn TIMER_IRQ_0() {
+    // Try to switch to next process
+    unsafe {
+        if let Some((old_sp_ptr, new_sp)) = schedule_next_isr() {
+            switch_context_isr(old_sp_ptr, new_sp);
+        }
+    }
+
     // Clear interrupt and reschedule alarm
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut alarm) = ALARM.borrow(cs).borrow_mut().as_mut() {
             alarm.clear_interrupt();
-            let _ = alarm.schedule(QUANTUM); // 100ms time slice
+            let _ = alarm.schedule(QUANTUM); // 10ms time slice
         }
     });
+}
 
-    // Try to switch to next process
+/// PendSV handler - used for voluntary yield
+/// Same logic as timer interrupt but triggered by software
+#[exception]
+fn PendSV() {
     unsafe {
         if let Some((old_sp_ptr, new_sp)) = schedule_next_isr() {
             switch_context_isr(old_sp_ptr, new_sp);
@@ -64,11 +85,3 @@ fn TIMER_IRQ_0() {
     }
 }
 
-/// PendSV handler - used for voluntary yield
-/// Same logic as timer interrupt but triggered by software
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn PendSV() {
-    unsafe { if let Some((old_sp_ptr, new_sp)) = schedule_next_isr() {
-        switch_context_isr(old_sp_ptr, new_sp);
-    }}
-}

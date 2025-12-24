@@ -11,7 +11,7 @@ use rp2040_hal::gpio::{Pin, FunctionSioOutput, PullDown};
 use hal::gpio::bank0::{Gpio0, Gpio1};
 use core::ptr;
 
-use rp2040_scheduler::{create_process, set_alarm, start_first_process, MemoryLayout, Scheduler, CURRENT, PROCS, QUANTUM, SCHEDULER};
+use rp2040_scheduler::{create_process, set_alarm, sleep_ms, start_first_process, MemoryLayout, Scheduler, CURRENT, PROCS, QUANTUM, SCHEDULER};
 
 #[unsafe(link_section = ".boot2")]
 #[used]
@@ -128,9 +128,11 @@ fn blink_fast(_arg: *mut ()) -> ! {
                 .unwrap();
             
             led.set_high().unwrap();
+            //sleep_ms(20).ok();
             timer.delay_ms(20);
             led.set_low().unwrap();
             timer.delay_ms(20);
+            //sleep_ms(20).ok();
         }
     }
 }
@@ -153,9 +155,11 @@ fn blink_slow(_arg: *mut ()) -> ! {
                 .unwrap();
             
             led.set_high().unwrap();
+            //sleep_ms(20).ok();
             timer.delay_ms(20);
             led.set_low().unwrap();
             timer.delay_ms(20);
+            //sleep_ms(20).ok();
         }
     }
 }

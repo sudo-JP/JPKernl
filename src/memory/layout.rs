@@ -1,6 +1,4 @@
-use core::clone::Clone;
-use core::marker::Copy;
-
+#[derive(Clone, Copy)]
 pub struct MemoryRegion {
     pub start: usize, 
     pub size: usize, 
@@ -18,17 +16,8 @@ impl MemoryRegion {
     }
 }
 
-impl Clone for MemoryRegion {
-    fn clone(&self) -> Self {
-        MemoryRegion {
-            start: self.start,
-            size: self.size,
-        }
-    }
-}
 
-impl Copy for MemoryRegion {}
-
+#[derive(Clone, Copy)]
 pub struct MemoryLayout {
     pub kernel_data: MemoryRegion, 
     pub wifi: MemoryRegion, 

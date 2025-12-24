@@ -1,5 +1,5 @@
 use crate::scheduler::{Scheduler, MAX_PROCS};
-use crate::{SchedulerError, PROCS};
+use crate::{SchedulerError, PROCS, SCHEDULER, SLEEP_QUEUE};
 use core::ptr; 
 
 /*
@@ -122,6 +122,8 @@ impl SleepQueue {
 
         Ok(min_node)
     }
+
+    pub fn get_size(&self) -> usize { self.size }
 }
 
 impl Scheduler<SleepEntry> for SleepQueue {
@@ -160,3 +162,28 @@ impl Scheduler<SleepEntry> for SleepQueue {
     }
 }
 
+/*
+ * Check if there 
+ * */
+pub fn check_sleep_and_wake() -> Result<u8, SchedulerError> {
+    unsafe {
+        let q = core::ptr::addr_of_mut!(SLEEP_QUEUE);
+        match (*q).dequeue() {
+            Ok(pid) => {
+                let idx = pid as usize;
+
+                let proc = PROCS[idx]
+                    .as_mut()
+                    .ok_or(SchedulerError::ProcessNotFound)?;
+
+                proc.state = crate::ProcessState::Ready; 
+
+                let sched = ptr::addr_of_mut!(SCHEDULER); 
+                (*sched).enqueue(idx as u8)?;
+
+                Ok(idx as u8)
+            }, 
+            Err(e) => Err(e),
+        }
+    }
+}
