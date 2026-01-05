@@ -76,10 +76,10 @@ fn main() -> ! {
     let lay = MemoryLayout::new();
     unsafe {
         // Set up MSP kernel region 
-        core::arch::asm!(
+        /*core::arch::asm!(
             "msr msp, {0}",
             in(reg) (lay.kernel_data.start + lay.kernel_data.size) as u32,
-        );
+        );*/
 
         // Unmask interrupt 
         pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
@@ -93,6 +93,8 @@ fn main() -> ! {
             .unwrap();
         create_process(stack_size, blink_slow, core::ptr::null_mut())
             .unwrap();
+        /*create_process(stack_size, idle, core::ptr::null_mut())
+            .unwrap();*/
 
         // Should not return 
         start_first_process();
@@ -107,6 +109,11 @@ fn main() -> ! {
         timer.delay_ms(500);*/
     }
 }
+
+fn idle(_arg: *mut ()) -> ! {
+    loop { cortex_m::asm::nop(); }
+}
+
 fn blink_fast(_arg: *mut ()) -> ! {    
     loop {
         unsafe {
@@ -126,9 +133,9 @@ fn blink_fast(_arg: *mut ()) -> ! {
             
             led.set_high().unwrap();
             sleep_ms(500).ok();
-            //timer.delay_ms(20);
+            //timer.delay_ms(1000);
             led.set_low().unwrap();
-            //timer.delay_ms(20);
+            //timer.delay_ms(1000);
             sleep_ms(500).ok();
         }
     }
@@ -152,11 +159,11 @@ fn blink_slow(_arg: *mut ()) -> ! {
                 .unwrap();
             
             led.set_high().unwrap();
-            sleep_ms(500).ok();
+            sleep_ms(1000).ok();
             //timer.delay_ms(20);
             led.set_low().unwrap();
             //timer.delay_ms(20);
-            sleep_ms(500).ok();
+            sleep_ms(1000).ok();
         }
     }
 }

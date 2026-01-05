@@ -27,6 +27,8 @@ extern "C" fn get_new_sp() -> *const u32 {
             _ => {},
         }
 
+        //let _ = (*sched).enqueue(old_pid);
+
         // Get new process
         let next_pid = match (*sched).dequeue() {
             Ok(pid) => pid, 
@@ -43,7 +45,7 @@ extern "C" fn get_new_sp() -> *const u32 {
         
         let new_pcb: *mut PCB = PROCS[next_pid as usize].as_mut().unwrap();
         
-        (*old_pcb).state = crate::ProcessState::Ready;
+        //(*old_pcb).state = crate::ProcessState::Ready;
         (*new_pcb).state = crate::ProcessState::Running;
 
         return (*new_pcb).sp as *const u32;
