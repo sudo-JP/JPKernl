@@ -15,43 +15,55 @@ extern "C" fn get_new_sp() -> *const u32 {
         // Save SP first
         (*old_pcb).sp = psp;
 
-        // Wake up sleeping processes
-        while (*sleep_q).get_size() > 0 {
-            if check_sleep_and_wake().is_err() {
-                break; 
+        // Check if current process is blocked
+        let current_is_blocked = matches!((*old_pcb).state, crate::ProcessState::Blocked(_));
+
+        loop {
+            // Wake up sleeping processes
+            while (*sleep_q).get_size() > 0 {
+                if check_sleep_and_wake().is_err() {
+                    break; 
+                }
+            }
+
+            // Try to get next process
+            match (*sched).dequeue() {
+                Ok(next_pid) => {
+                    // Re-enqueue old if Ready/Running
+                    match (*old_pcb).state {
+                        crate::ProcessState::Ready | crate::ProcessState::Running => {
+                            let _ = (*sched).enqueue(old_pid);
+                        }
+                        _ => {},
+                    }
+
+                    // No switch needed - same process
+                    if old_pid == next_pid {
+                        return core::ptr::null();
+                    }
+                    
+                    CURRENT = Some(next_pid);
+                    
+                    let new_pcb: *mut PCB = PROCS[next_pid as usize].as_mut().unwrap();
+                    
+                    (*old_pcb).state = crate::ProcessState::Ready;
+                    (*new_pcb).state = crate::ProcessState::Running;
+
+                    return (*new_pcb).sp as *const u32;
+                }
+                Err(_) => {
+                    // Queue empty
+                    if current_is_blocked {
+                        // Current is blocked - MUST wait for someone to wake
+                        // Spin until a sleeper is ready
+                        continue;
+                    } else {
+                        // Current is runnable - no switch needed
+                        return core::ptr::null();
+                    }
+                }
             }
         }
-
-        // Try to get next process
-        let next_pid = match (*sched).dequeue() {
-            Ok(pid) => pid,
-            Err(_) => {
-                // Queue empty - return null (no switch)
-                return core::ptr::null();
-            }
-        };
-
-        // Re-enqueue old if Ready/Running
-        match (*old_pcb).state {
-            crate::ProcessState::Ready | crate::ProcessState::Running => {
-                let _ = (*sched).enqueue(old_pid);
-            }
-            _ => {},
-        }
-
-        // No switch needed - same process
-        if old_pid == next_pid {
-            return core::ptr::null();
-        }
-        
-        CURRENT = Some(next_pid);
-        
-        let new_pcb: *mut PCB = PROCS[next_pid as usize].as_mut().unwrap();
-        
-        (*old_pcb).state = crate::ProcessState::Ready;
-        (*new_pcb).state = crate::ProcessState::Running;
-
-        return (*new_pcb).sp as *const u32;
     }
 }
 
