@@ -1,11 +1,10 @@
 use cortex_m::interrupt::Mutex;
-use cortex_m_rt::exception;
 use rp2040_hal::{timer::{Alarm, Alarm0}};
 use core::cell::RefCell;
 use rp2040_hal::pac::interrupt;
 use core::ptr;
 
-use crate::{check_sleep_and_wake, scheduler::{CURRENT, PROCS, SCHEDULER}, switch_context, Scheduler, PCB, QUANTUM, SLEEP_QUEUE};
+use crate::{check_sleep_and_wake, scheduler::{CURRENT, PROCS, SCHEDULER}, Scheduler, PCB, QUANTUM, SLEEP_QUEUE};
 
 
 static ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
@@ -26,55 +25,9 @@ fn handle_alarm() {
     });
 }
 
-fn switch_process() {
-    let sched = ptr::addr_of_mut!(SCHEDULER);
-    let sleep_q = ptr::addr_of_mut!(SLEEP_QUEUE);
-    
-    unsafe {
-        let old_pid = CURRENT.unwrap();
-
-        // wake up all sleeping processes 
-        while (*sleep_q).get_size() > 0 {
-            if check_sleep_and_wake().is_err() {
-                break; 
-            }
-        }
-
-        // Get new process
-        let next_pid = (*sched).dequeue().ok().unwrap();
-
-        let old_pcb: *mut PCB = PROCS[old_pid as usize].as_mut().unwrap();
-        match (*old_pcb).state {
-            crate::ProcessState::Ready | crate::ProcessState::Running => {
-                let _ = (*sched).enqueue(old_pid);
-            }
-            _ => {},
-        }
-        
-        if old_pid == next_pid {
-            return;
-        }
-        
-        CURRENT = Some(next_pid);
-        
-        let new_pcb: *mut PCB = PROCS[next_pid as usize].as_mut().unwrap();
-        
-        (*old_pcb).state = crate::ProcessState::Ready;
-        (*new_pcb).state = crate::ProcessState::Running;
-        
-        switch_context(&mut (*old_pcb), &(*new_pcb));
-    }
-}
-
 #[interrupt]
-unsafe fn TIMER_IRQ_0() -> ! {
+fn TIMER_IRQ_0() {
     handle_alarm();  
-    switch_process();
-    loop {}
+    cortex_m::peripheral::SCB::set_pendsv();
 }
 
-#[exception]
-unsafe fn PendSV() -> ! {
-    switch_process();
-    loop {}
-}

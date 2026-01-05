@@ -1,51 +1,50 @@
-use crate::{Scheduler, CURRENT, PCB, PROCS, SCHEDULER};
+use crate::{check_sleep_and_wake, Scheduler, CURRENT, PCB, PROCS, SCHEDULER, SLEEP_QUEUE};
+use core::ptr;
 
-pub fn switch_context(old_pcb: &mut PCB, new_pcb: &PCB) -> () {
-    unsafe {
-        let old_sp_ptr: *mut *mut u32 = &mut old_pcb.sp;
-        let new_sp: *const u32 = new_pcb.sp; 
-
-        getcontext(old_sp_ptr);   
-        setcontext(new_sp);        
-    } 
-}
-
-/*
- * Called during Interrupt Service Routine
- * Literally getcontext from C
- * */
-#[unsafe(naked)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn getcontext(old_sp_ptr: *mut *mut u32) {
-    //, new_sp: *const u32) {
-    core::arch::naked_asm!(
-        // Allocate stack downward, then access them like an array 
-        // We want to manually save r4-r11, so 8 words * 4 = 32 down
-        "mrs r2, psp", // Current process sp 
+extern "C" fn get_new_sp() -> *const u32 {
+    let psp: *mut u32 = cortex_m::register::psp::read() as *mut u32;
+    let sched = ptr::addr_of_mut!(SCHEDULER);
+    let sleep_q = ptr::addr_of_mut!(SLEEP_QUEUE);
+    
+    unsafe {
+        let old_pid = CURRENT.unwrap();
+
+        // wake up all sleeping processes 
+        while (*sleep_q).get_size() > 0 {
+            if check_sleep_and_wake().is_err() {
+                break; 
+            }
+        }
+
+        // Get new process
+        let next_pid = (*sched).dequeue().ok().unwrap();
+
+        let old_pcb: *mut PCB = PROCS[old_pid as usize].as_mut().unwrap();
+        match (*old_pcb).state {
+            crate::ProcessState::Ready | crate::ProcessState::Running => {
+                let _ = (*sched).enqueue(old_pid);
+            }
+            _ => {},
+        }
+
+        (*old_pcb).sp = psp;
         
-        // For some reason i cant sub by 32 
-        "subs r2, r2, #32",
+        if old_pid == next_pid {
+            return (*old_pcb).sp as *const u32;
+        }
+        
+        CURRENT = Some(next_pid);
+        
+        let new_pcb: *mut PCB = PROCS[next_pid as usize].as_mut().unwrap();
+        
+        (*old_pcb).state = crate::ProcessState::Ready;
+        (*new_pcb).state = crate::ProcessState::Running;
 
-        "str r4, [r2, #0]", 
-        "str r5, [r2, #4]", 
-        "str r6, [r2, #8]", 
-        "str r7, [r2, #12]",
-
-        // Temp registers 
-        "mov r1, r8", 
-        "str r1, [r2, #16]", 
-        "mov r1, r9",
-        "str r1, [r2, #20]",
-        "mov r1, r10", 
-        "str r1, [r2, #24]", 
-        "mov r1, r11",
-        "str r1, [r2, #28]",
-
-        // Store new stack to r0 
-        "str r2, [r0]",
-        "bx lr",
-    );
+        return (*new_pcb).sp as *const u32;
+    }
 }
+
 
 /*
  * Function should never return, call to run first process given the sp 
@@ -153,29 +152,41 @@ pub unsafe extern "C" fn setcontext(sp: *const u32) -> ! {
         // Set the process sp to r0
         "msr psp, r0", 
 
-        // Switch to thread mode by writing 1 to control reg
-        // Add on bit index 1 (which is 2)
-        "movs r1, #2",
-
-        // Save back to control
-        "msr CONTROL, r1", 
-
-        // Sync barrier
-        "isb", 
-
-        // Restore special registers, pop from sp to r0-r3
-        // Since in thread mode, and we set sp to psp, this is valid
-        "pop {{r0-r3}}",
-        "pop {{r4}}", 
-        "mov r12, r4",
-
-        "pop {{r4}}",       // LR  
-        "mov lr, r4",
-
-        "pop {{r4, r5}}",   // PC lives in r4 temporarily, discard r5
-
         "ldr r0, =0xFFFFFFFD",
         "bx r0",
     );
 }
 
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+pub unsafe extern "C" fn PendSV() {
+    core::arch::naked_asm!(
+        // Save r4-r11
+        "mrs r0, psp", 
+        "subs r0, r0, #32", 
+        
+        "str r4, [r0, #0]", 
+        "str r5, [r0, #4]", 
+        "str r6, [r0, #8]", 
+        "str r7, [r0, #12]", 
+
+        // temp reg
+        "mov r1, r8",
+        "str r1, [r0, #16]", 
+        "mov r1, r9",
+        "str r1, [r0, #20]", 
+        "mov r1, r10",
+        "str r1, [r0, #24]", 
+        "mov r1, r11",
+        "str r1, [r0, #28]", 
+
+        // Save new r0 
+        "msr psp, r0", 
+
+        // Call to get new sp, result stores in r0 
+        "bl get_new_sp",
+
+        // set new context given r0
+        "bl setcontext",
+    );
+}
