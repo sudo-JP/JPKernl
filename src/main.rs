@@ -94,11 +94,7 @@ fn main() -> ! {
         create_process(stack_size, blink_slow, core::ptr::null_mut())
             .unwrap();
 
-        CURRENT = Some(0);
-        // Dequeue process 0 since we're about to run it
-        let sched = ptr::addr_of_mut!(SCHEDULER); 
-        let _ = (*sched).dequeue();
-        start_first_process(PROCS[0].unwrap().sp);
+        start_first_process();
     }
     
     #[allow(unreachable_code)]
